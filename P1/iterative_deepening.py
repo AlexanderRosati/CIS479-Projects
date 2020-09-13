@@ -1,5 +1,8 @@
 import queue;
 
+#Tracks what step the algorithm is on
+step_counter = 0
+
 #Returns the display value of the given index within the space
 def get_display(x, y):
     return str(space[y][x])
@@ -85,7 +88,7 @@ class Node:
 
     #Marks this node as scanned by the search algorithm
     #(Placed into the frontier)
-    def scan(self, parent, depth, cost):
+    def scan(self, parent, depth, cost, step_number):
 
         #Mark state
         self.state = 1
@@ -94,45 +97,53 @@ class Node:
         self.parent = parent
         self.depth = depth
         self.cost = cost
+
+        #Set step visited on
+        self.visited_on = step_number
     
     #Marks this node as visited by the search algorithm
-    def visit(self, step_number):
+    def visit(self):
 
-        #Mark state and step number
+        #Mark state
         self.state = 2
-        self.visited_on = step_number
 
 #Scans the given node position, adding it to the frontier
 def scan(parent, nodePos, depth, cost):
 
-        #If in bounds
-        if ((nodePos[0] >= 0 and nodePos[0] < width) and (nodePos[1] >= 0 and nodePos[1] < height)):
+    #Retrieve step counter value
+    global step_counter
 
-            #Get the node from the position
-            node = space[nodePos[1]][nodePos[0]]
+    #If in bounds
+    if ((nodePos[0] >= 0 and nodePos[0] < width) and (nodePos[1] >= 0 and nodePos[1] < height)):
 
-            #If the node isn't a wall and has not been scanned
-            if ((not node.solid) and node.state == 0):
+        #Get the node from the position
+        node = space[nodePos[1]][nodePos[0]]
+
+        #If the node isn't a wall and has not been scanned
+        if ((not node.solid) and node.state == 0):
                 
-                #Mark the node as scanned and add to the queue
-                node.scan(parent, depth, cost)
-                q.put(node)
+            #Mark the node as scanned and add to the queue
+            node.scan(parent, depth, cost, step_counter)
+            q.put(node)
+
+            #Increment the step counter
+            step_counter += 1
     
 
 #Visits the given node, adding new neighbors to the frontier
-def visit(node, step_number):
+def visit(node):
 
     #Mark the node as visited
-    node.visit(step_number)
+    node.visit()
 
     #If not at depth limit
     if (node.depth < depth_limit):
 
         #Scan neighbors
-        scan(node, [node.pos[0], node.pos[1]+1], node.depth+1, node.cost+1)
-        scan(node, [node.pos[0]+1, node.pos[1]], node.depth+1, node.cost+2)
-        scan(node, [node.pos[0], node.pos[1]-1], node.depth+1, node.cost+3)
         scan(node, [node.pos[0]-1, node.pos[1]], node.depth+1, node.cost+2)
+        scan(node, [node.pos[0], node.pos[1]-1], node.depth+1, node.cost+3)
+        scan(node, [node.pos[0]+1, node.pos[1]], node.depth+1, node.cost+2)
+        scan(node, [node.pos[0], node.pos[1]+1], node.depth+1, node.cost+1)
 
 #-------------------------------------------------------------------------------
 
@@ -161,7 +172,7 @@ max_depth = 9
 while (depth_limit <= max_depth):
 
     #Initialize step counter
-    step = 0
+    step_counter = 0
     
     #Initialize queue with start position
     q = queue.LifoQueue()
@@ -174,10 +185,7 @@ while (depth_limit <= max_depth):
         node = q.get()
 
         #Visit the node
-        visit(node, step)
-
-        #Increment step counter
-        step += 1
+        visit(node)
 
     #Display pass results
     display_space()
