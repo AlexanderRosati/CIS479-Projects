@@ -1,3 +1,4 @@
+#Authors: Alexander Rosati and Isaac Hampshire
 import queue;
 
 #Tracks what step the algorithm is on
