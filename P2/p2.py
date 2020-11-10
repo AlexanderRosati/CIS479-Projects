@@ -131,10 +131,32 @@ def prediction(dist, action):
             new_dist[state[0], state[1]] += prob * dist[os[0], os[1]] 
     return new_dist # update distribution
 
+# backward pass
+def backward(dist, evidence, action):
+    new_dist = np.zeros((height, width), np.float64)
+    for os in open_spaces:
+        for (state, prob) in transitional_prob(os, action):
+            # add on term for total probability
+            # value += recursive probability * evidence prob * transition prob
+            new_dist[os[0], os[1]] += dist[state[0], state[1]] * evidence_cond_prob(evidence, state) * prob
+    # normalize
+    new_dist /= np.sum(new_dist)
+    return new_dist
+
 # script starts here ###################################################################
 #
 # initialize distribution
 dist = []
+
+# forward pass distributions
+forward_evidence = []
+forward_dist = []
+
+# backward pass probabilities
+backward_dist = [np.ones((height, width), np.float64)]
+
+# actions
+actions = []
 
 # create list
 for _ in range(6):
@@ -160,11 +182,40 @@ while len(agenda) != 0:
         filtering(dist, evidence) # sensing update
         print('Filtering after Evidence ' + str(evidence))
         display(dist) # display dist
+
+        # copy distribution to forward values
+        new_dist = np.zeros((height, width), np.float64)
+        for os in open_spaces:
+            new_dist[os[0], os[1]] = dist[os[0], os[1]]
+        forward_dist.append(new_dist);
+        forward_evidence.append(evidence)
     else:
         agenda_item = 'evidence' # process evidence next time
         action = agenda.pop(0) # get action
         dist = prediction(dist, action) # motion update
         print('Prediction after Action ' + ('W' if action == 0 else 'N'))
         display(dist) # display distribution
+
+        # store action
+        actions.append(action)
     
     print() # new line character
+
+# for each distribution collected
+for i in range(len(forward_dist)-2, -1, -1):
+
+    # compute next backward distribution using following evidence and action
+    next_backward_dist = backward(backward_dist[0], forward_evidence[i+1], actions[i])
+
+    # insert at beginning
+    backward_dist.insert(0, next_backward_dist)
+
+    # multiply with forward term and normalize
+    smooth = np.multiply(forward_dist[i],next_backward_dist)
+    smooth /= np.sum(smooth)
+
+    # display smoothed value
+    print('Smoothed Position ' + str(i+1))
+    display(smooth)
+    print()
+    
