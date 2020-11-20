@@ -10,6 +10,9 @@ import numpy as np # 'pip install numpy' to install this module
 import random as rnd
 
 # global vars #######################################################################
+NUM_TRIALS = 10000
+NUM_STEPS = 100
+
 width = 5 # width of maze
 height = 6 # height of maze
 obstacles = ((1, 1),    # EEEEE     E = Empty
@@ -21,6 +24,9 @@ obstacles = ((1, 1),    # EEEEE     E = Empty
 
 terminal_state = (2, 2)
 terminal_reward = 100
+
+GAMMA = 0.9 # discount factor
+EPSILON =  0.05 # chance of random action
 
 PROB_GO_FORWARD = 0.7
 PROB_DRIFT = 0.15
@@ -117,21 +123,15 @@ def max_action(state, q_values):
 # returns the reward for the given state-action pair
 def reward(state, action):
 
-    reward = 0
-    # if the next state is terminal
-    if transition(state, action) == terminal_state:
-
-        # use terminal reward
-        reward = terminal_reward
+    # going west or east
+    if action == 0 or action == 2:
+        return -2
+    # going north
+    elif action == 1:
+        return -3
+    # going south
     else:
-        # depend on direction
-        if action == 0 or action == 2:
-            reward = -2
-        elif action == 1:
-            reward = -3
-        else:
-            reward = -1
-    return reward
+        return -1
 
 # applies Q-Learning step
 def update_q(state, action, next_state, access_freq, q_values):
@@ -139,20 +139,56 @@ def update_q(state, action, next_state, access_freq, q_values):
     # increment access frequency
     access_freq[state[1], state[0]][action] += 1
 
-    # todo
+    # get current q value for the state action pair
+    curr_qval = q_values[state[1], state[0]][action]
+
+    # get access frequency for state action pair
+    freq = access_freq[state[1], state[0]][action]
+
+    # get reward for state action pair
+    rew = reward(state, action)
+
+    # if next state is terminal state
+    if next_state == terminal_state:
+        max_qval_nxt_state = terminal_reward
+    #otherwise
+    else:
+        # get maximum q-value for next state action pair
+        max_qval_nxt_state = q_values[next_state[1], next_state[0]][max_action(next_state, q_values)]
+
+    # calculate new q-value for the state action pair
+    new_qval = curr_qval + (1 / freq) * (rew + (GAMMA * max_qval_nxt_state) - curr_qval)
+
+    # update q-value
+    q_values[state[1], state[0]][action] = new_qval
+
+# determine action at given state
+def epsilon_greedy_alg(state, q_values):
+    
+    # generate random number
+    chance = rnd.random()
+
+    # choose random action with 5% chance
+    if chance <= EPSILON:
+        return rnd.randrange(4)
+
+    # choose optimal action with 95% chance
+    else:
+        return max_action(state, q_values)
 
 # returns a random position to start a path from
 def start_state():
-    # choose a random open space (excluding the terminal state)
-    index = rnd.randrange(len(open_spaces)-1)
+    # choose a random open space
+    rand_state = open_spaces[rnd.randrange(len(open_spaces))]
 
-    # if chosen index is the terminal state
-    if open_spaces[index] == terminal_state:
+    # while you have choosen the terminal state
+    while rand_state == terminal_state:
 
-        # use the next index and loop if needed
-        index = (index + 1) % len(open_spaces)
+        # pick another state
+        rand_state = open_spaces[rnd.randrange(len(open_spaces))]
     
-    return open_spaces[index]
+    # return random state
+    return rand_state
 
 # displays the values of a (state, action) list
 def display(data, display_goal=True):
@@ -245,39 +281,6 @@ def display_policy(data):
             print("    ", end='')
         print("\n")
 
-# displays the policy and marks the given position (for testing)
-def display_marked(data, mark):
-
-    # for each row
-    for y, row in enumerate(data):
-
-        # for each cell
-        for x, cell in enumerate(row):
-            
-            if (x, y) in obstacles:
-                # display obstacle
-                print("####", end='')
-            elif (x, y) == terminal_state:
-                # display terminal reward
-                print(("+"+str(terminal_reward)).center(4), end='')
-            elif (x, y) == mark:
-                # display marked location
-                print("MARK", end='')
-            else:
-                # display policy
-                policy = max_action((x, y), data)
-                if policy==0:
-                    print("<<<<", end='')
-                elif policy==1:
-                    print("^^^^", end='')
-                elif policy==2:
-                    print(">>>>", end='')
-                elif policy==3:
-                    print("VVVV", end='')
-            print("    ", end='')
-        print("\n")
-
-
 # script starts here ###################################################################
 #
 # access frequency
@@ -286,47 +289,40 @@ access_freq = np.zeros((height, width, 4), np.intc)
 # q-values
 q_values = np.zeros((height, width, 4), np.float64)
 
-# current state
-state = start_state()
+# initialize vars
+curr_state = None
+next_state = None
+action = None
+step = 0
 
-# randomize q-values (for testing)
-#for row in q_values:
-#    for cell in row:
-#        cell[0] = rnd.random()*10
-#        cell[1] = rnd.random()*10
-#        cell[2] = rnd.random()*10
-#        cell[3] = rnd.random()*10
+# do trials
+for trial_num in range(NUM_TRIALS):
+    # start at random open space excluding terminal space
+    curr_state = start_state()
 
-# display initial state
-print("Initial")
-display_marked(q_values, state)
-print()
+    # print which trial
+    print('Trial ' + str(trial_num + 1))
 
-# limit to 25 steps for now
-for i in range(25):
+    # do trial until we reach terminal state
+    while curr_state != terminal_state and step < NUM_STEPS:
+        # determine action at current state with epsilon greedy algorithm
+        action = epsilon_greedy_alg(curr_state, q_values)
 
-    # use max transition
-    action = max_action(state, q_values)
+        # determine next state, possible drifting
+        next_state = transition_with_drift(curr_state, action)
 
-    # get next state from transition
-    next_state = transition_with_drift(state, action)
+        # do q-value update
+        update_q(curr_state, action, next_state, access_freq, q_values)
 
-    # apply Q-Learning
-    update_q(state, action, next_state, access_freq, q_values)
+        # increment step
+        step += 1
+        
+        # move to next state
+        curr_state = next_state
+    
+    # set step back to zero
+    step = 0
 
-    # move to the next state
-    state = next_state
-
-    # display current policy and position (for testing)
-    print("Step " + str(i+1))
-    display_marked(q_values, state)
-    print()
-
-    # if the goal state is found
-    if state == terminal_state:
-
-        # end the path
-        break;
 
 # display q-values
 print("Table of Q(s, a)")
@@ -335,7 +331,7 @@ print()
 
 # display access frequencies
 print("Table of N(s, a)")
-display(access_freq, False)
+display(access_freq, True)
 print()
 
 # display policy
